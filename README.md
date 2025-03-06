@@ -1,7 +1,23 @@
 # MYYOOMI-Discord-Bot-Announcer
-MYYOOMI Discord Bot Announcer Python
 
-file .env
-you add token bot discord DISCORD_BOT_TOKEN=
-i create in 0.0.0.0:5709
-you can edit port in file app.py
+MYYOOMI Discord Bot Announcer in Python.
+
+## Setup
+
+1. **Configure Environment Variables:**
+   - Open the `.env` file.
+   - Add your Discord bot token:
+     ```
+     DISCORD_BOT_TOKEN=<your_token_here>
+     ```
+
+2. **Set Up Server:**
+   - The bot runs on `0.0.0.0` at port `5709` by default.
+   - You can edit the port in the `app.py` file (line 176).
+
+## Starting the Bot
+
+```bash
+python app.py
+
+I hope this helps! If you need any more changes, feel free to let me know!
