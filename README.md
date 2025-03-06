@@ -19,3 +19,6 @@ MYYOOMI Discord Bot Announcer in Python.
 
 ```bash
 python app.py
+```
+
+Feel free to reach out if you have any other requests or need further adjustments!
