@@ -5,7 +5,7 @@ MYYOOMI Discord Bot Announcer in Python.
 ## Setup
 
 1. **Configure Environment Variables:**
-   - Open the `.env` file.
+   - Open the `.env` file. If it doesn't exist, you can create it.
    - Add your Discord bot token:
      ```
      DISCORD_BOT_TOKEN=<your_token_here>
@@ -19,5 +19,3 @@ MYYOOMI Discord Bot Announcer in Python.
 
 ```bash
 python app.py
-
-I hope this helps! If you need any more changes, feel free to let me know!
