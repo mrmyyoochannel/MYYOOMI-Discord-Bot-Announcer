@@ -75,9 +75,15 @@ def home():
                         memberContainer.appendChild(div);
                     });
                 }
+                
+                function toggleColorPicker() {
+                    const embedCheck = document.getElementById('embedCheck');
+                    const colorPicker = document.getElementById('colorPicker');
+                    colorPicker.style.display = embedCheck.checked ? 'block' : 'none';
+                }
             </script>
         </head>
-        <body class="text-white bg-dark" onload="fetchGuilds()">
+        <body class="text-white bg-dark" onload="fetchGuilds(); toggleColorPicker();">
             <div class="container mt-5">
                 <div class="text-white bg-dark card shadow p-4">
                     <h1 class="text-center">MYYOOMI Discord Bot Announcer</h1>
@@ -112,6 +118,17 @@ def home():
                                 <input class="form-check-input" type="checkbox" name="tag_everyone" value="yes">
                                 <label class="form-check-label">Yes, tag @everyone</label>
                             </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Send as Embed</label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="send_as_embed" id="embedCheck" value="yes" onchange="toggleColorPicker()">
+                                <label class="form-check-label">Yes, send as embed</label>
+                            </div>
+                        </div>
+                        <div class="mb-3" id="colorPicker" style="display: none;">
+                            <label class="form-label">Select Color</label>
+                            <input type="color" class="form-control" name="color" value="#00ff00">
                         </div>
                         <button type="submit" class="btn btn-primary w-100">Send Announcement</button>
                     </form>
@@ -154,6 +171,9 @@ def announce_web():
     message = request.form.get('message').replace("\r\n", "\n")
     image_url = request.form.get('image_url', '').strip()
     tag_everyone = request.form.get('tag_everyone') == "yes"
+    send_as_embed = request.form.get('send_as_embed') == "yes"
+    color = request.form.get('color', '#00ff00').lstrip('#')
+    color = int(color, 16)
 
     member_mentions = ' '.join([f'<@{mid}>' for mid in member_ids])
     everyone_mention = "@everyone" if tag_everyone else ""
@@ -164,10 +184,18 @@ def announce_web():
             for channel_id in channel_ids:
                 channel = bot.get_channel(int(channel_id))
                 if channel:
-                    content = f'**{title}**\n{message}\n{everyone_mention} {member_mentions}'.strip()
-                    await channel.send(content)
-                    if image_url:
-                        await channel.send(image_url)
+                    if send_as_embed:
+                        embed = discord.Embed(title=title, description=message, color=color)
+                        if image_url:
+                            embed.set_image(url=image_url)
+                        if tag_everyone or member_mentions:
+                            embed.add_field(name="Mentions", value=f'{everyone_mention} {member_mentions}', inline=False)
+                        await channel.send(embed=embed)
+                    else:
+                        content = f'**{title}**\n{message}\n{everyone_mention} {member_mentions}'.strip()
+                        await channel.send(content)
+                        if image_url:
+                            await channel.send(image_url)
 
     asyncio.run_coroutine_threadsafe(send_message(), bot.loop)
     return redirect(url_for('home'))
