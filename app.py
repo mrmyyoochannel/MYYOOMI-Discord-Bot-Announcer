@@ -34,7 +34,7 @@ def home():
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>MYYOOMI Discord Bot Announcer</title>
+            <title>Discord Bot Announcer Ver.1.1 create by MYYOOMI</title>
             <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
             <script>
                 async function fetchGuilds() {
@@ -86,7 +86,7 @@ def home():
         <body class="text-white bg-dark" onload="fetchGuilds(); toggleColorPicker();">
             <div class="container mt-5">
                 <div class="text-white bg-dark card shadow p-4">
-                    <h1 class="text-center">MYYOOMI Discord Bot Announcer</h1>
+                    <h1 class="text-center">Discord Bot Announcer Ver.1.1</h1>
                     <form class="text-white bg-dark" action="/announce" method="post">
                         <div class="mb-3">
                             <label class="form-label">Select Server</label>
