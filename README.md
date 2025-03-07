@@ -1,6 +1,6 @@
-# MYYOOMI-Discord-Bot-Announcer
+# Discord-Bot-Announcer ver.1.1
 
-MYYOOMI Discord Bot Announcer in Python. This project uses Bootstrap.
+Discord Bot Announcer in Python. This project uses Bootstrap.
 
 ## Setup
 1. **Install Flask:**
