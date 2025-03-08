@@ -1,4 +1,4 @@
-# Discord-Bot-Announcer ver.1.1
+# Discord-Bot-Announcer ver.1.2a
 
 Discord Bot Announcer in Python. This project uses Bootstrap.
 
@@ -24,11 +24,13 @@ Discord Bot Announcer in Python. This project uses Bootstrap.
 3. **Set Up Server:**
    - The bot runs on `0.0.0.0` at port `5709` by default.
    - You can edit the port in the `app.py` file (line 176).
+   - **Note:** This project requires Python version 12 or higher.
 
 ## Starting the Bot
 
 ```bash
 python app.py
+
 ```
 
 I hope this helps! If there's anything more you need, feel free to let me know.
