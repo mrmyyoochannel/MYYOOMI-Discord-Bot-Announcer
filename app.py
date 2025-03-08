@@ -26,117 +26,187 @@ async def on_ready():
 async def announce(ctx, *, message: str):
     await ctx.send(message)
 
+@app.route('/set_status', methods=['POST'])
+def set_status():
+    data = request.json
+    status_text = data.get("status", "กำลังรับข้อมูล...")
+    
+    async def update_status():
+        await bot.change_presence(activity=discord.Game(name=status_text))
+    
+    asyncio.run_coroutine_threadsafe(update_status(), bot.loop)
+    return jsonify({"message": "Status updated!"})
+
 @app.route('/')
 def home():
     return render_template_string('''
-        <!DOCTYPE html>
-        <html lang="en">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Discord Bot Announcer Ver.1.1 create by MYYOOMI</title>
-            <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-            <script>
-                async function fetchGuilds() {
-                    let response = await fetch('/guilds');
-                    let guilds = await response.json();
-                    let select = document.getElementById('guildSelect');
-                    select.innerHTML = '<option value="">Select a server</option>';
-                    guilds.forEach(guild => {
-                        let option = document.createElement('option');
-                        option.value = guild.id;
-                        option.textContent = guild.name;
-                        select.appendChild(option);
-                    });
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Announcement Bot by MYYOOMI</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>
+        async function fetchGuilds() {
+            let response = await fetch('/guilds');
+            let guilds = await response.json();
+            let select = document.getElementById('guildSelect');
+            select.innerHTML = '<option value="">Select Server</option>';
+            guilds.forEach(guild => {
+                let option = document.createElement('option');
+                option.value = guild.id;
+                option.textContent = guild.name;
+                select.appendChild(option);
+            });
+        }
+        async function fetchChannelsAndMembers() {
+            let guildId = document.getElementById('guildSelect').value;
+            if (!guildId) return;
+            
+            let channelResponse = await fetch(`/channels?guild_id=${guildId}`);
+            let channels = await channelResponse.json();
+            let channelContainer = document.getElementById('channelsContainer');
+            channelContainer.innerHTML = '';
+            channels.forEach(channel => {
+                let div = document.createElement('div');
+                div.classList.add('form-check');
+                div.innerHTML = `<input class="form-check-input" type="checkbox" name="channels" value="${channel.id}"> ${channel.name}`;
+                channelContainer.appendChild(div);
+            });
+            
+            let memberResponse = await fetch(`/members?guild_id=${guildId}`);
+            let members = await memberResponse.json();
+            let memberContainer = document.getElementById('membersContainer');
+            memberContainer.innerHTML = '';
+            members.forEach(member => {
+                let div = document.createElement('div');
+                div.classList.add('form-check');
+                div.innerHTML = `<input class="form-check-input" type="checkbox" name="members" value="${member.id}"> ${member.name}`;
+                memberContainer.appendChild(div);
+            });
+        }
+        
+        function toggleColorPicker() {
+            const embedCheck = document.getElementById('embedCheck');
+            const colorPicker = document.getElementById('colorPicker');
+            colorPicker.style.display = embedCheck.checked ? 'block' : 'none';
+        }
+        async function updateStatus() {
+            const { value: newStatus } = await Swal.fire({
+                title: 'Update Status',
+                input: 'text',
+                inputLabel: 'Enter new status',
+                showCancelButton: true,
+                inputValidator: (value) => {
+                    if (!value) {
+                        return 'You need to write something!'
+                    }
                 }
-                async function fetchChannelsAndMembers() {
-                    let guildId = document.getElementById('guildSelect').value;
-                    if (!guildId) return;
-                    
-                    let channelResponse = await fetch(`/channels?guild_id=${guildId}`);
-                    let channels = await channelResponse.json();
-                    let channelContainer = document.getElementById('channelsContainer');
-                    channelContainer.innerHTML = '';
-                    channels.forEach(channel => {
-                        let div = document.createElement('div');
-                        div.classList.add('form-check');
-                        div.innerHTML = `<input class="form-check-input" type="checkbox" name="channels" value="${channel.id}"> ${channel.name}`;
-                        channelContainer.appendChild(div);
-                    });
-                    
-                    let memberResponse = await fetch(`/members?guild_id=${guildId}`);
-                    let members = await memberResponse.json();
-                    let memberContainer = document.getElementById('membersContainer');
-                    memberContainer.innerHTML = '';
-                    members.forEach(member => {
-                        let div = document.createElement('div');
-                        div.classList.add('form-check');
-                        div.innerHTML = `<input class="form-check-input" type="checkbox" name="members" value="${member.id}"> ${member.name}`;
-                        memberContainer.appendChild(div);
-                    });
-                }
-                
-                function toggleColorPicker() {
-                    const embedCheck = document.getElementById('embedCheck');
-                    const colorPicker = document.getElementById('colorPicker');
-                    colorPicker.style.display = embedCheck.checked ? 'block' : 'none';
-                }
-            </script>
-        </head>
-        <body class="text-white bg-dark" onload="fetchGuilds(); toggleColorPicker();">
-            <div class="container mt-5">
-                <div class="text-white bg-dark card shadow p-4">
-                    <h1 class="text-center">Discord Bot Announcer Ver.1.1</h1>
-                    <form class="text-white bg-dark" action="/announce" method="post">
-                        <div class="mb-3">
-                            <label class="form-label">Select Server</label>
-                            <select class="form-control" id="guildSelect" name="guild_id" onchange="fetchChannelsAndMembers()" required></select>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Select Channels</label>
-                            <div id="channelsContainer"></div>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Select Members to Tag</label>
-                            <div id="membersContainer"></div>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Title</label>
-                            <input type="text" class="form-control" name="title" required>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Message</label>
-                            <textarea class="form-control" name="message" rows="4" required></textarea>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Image URL</label>
-                            <input type="text" class="form-control" name="image_url">
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Tag Everyone</label>
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" name="tag_everyone" value="yes">
-                                <label class="form-check-label">Yes, tag @everyone</label>
-                            </div>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Send as Embed</label>
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" name="send_as_embed" id="embedCheck" value="yes" onchange="toggleColorPicker()">
-                                <label class="form-check-label">Yes, send as embed</label>
-                            </div>
-                        </div>
-                        <div class="mb-3" id="colorPicker" style="display: none;">
-                            <label class="form-label">Select Color</label>
-                            <input type="color" class="form-control" name="color" value="#00ff00">
-                        </div>
-                        <button type="submit" class="btn btn-primary w-100">Send Announcement</button>
-                    </form>
-                </div>
+            });
+
+            if (newStatus) {
+                await fetch('/set_status', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({status: newStatus})
+                });
+                Swal.fire({
+                    title: 'Status Updated!',
+                    text: 'The status has been successfully updated.',
+                    icon: 'success',
+                    confirmButtonText: 'OK'
+                });
+            }
+        }
+        async function handleSubmit(event) {
+            event.preventDefault();
+            let form = event.target;
+            let formData = new FormData(form);
+            let response = await fetch(form.action, {
+                method: 'POST',
+                body: formData
+            });
+            if (response.ok) {
+                Swal.fire({
+                    title: 'Success!',
+                    text: 'Your announcement has been sent.',
+                    icon: 'success',
+                    confirmButtonText: 'OK'
+                });
+            } else {
+                Swal.fire({
+                    title: 'Error!',
+                    text: 'There was a problem sending your announcement.',
+                    icon: 'error',
+                    confirmButtonText: 'OK'
+                });
+            }
+        }
+    </script>
+</head>
+<body class="text-white bg-dark" onload="fetchGuilds(); toggleColorPicker();">
+    <div class="container mt-5">
+        <div class="text-white bg-dark card shadow p-4">
+            <div class="text-center">
+                <img src="" class="rounded-circle" alt="logo">
             </div>
-            <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-        </body>
-        </html>
+            <h1 class="text-center">⚒️Control Panel Announcement Bot⚒️</h1>
+            <form class="text-white bg-dark" action="/announce" method="post" onsubmit="handleSubmit(event)">
+                <div class="mb-3">
+                    <label class="form-label">🌐Select Server</label>
+                    <select class="form-control" id="guildSelect" name="guild_id" onchange="fetchChannelsAndMembers()" required></select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">📁Select Channel (Only one channel can be selected, the bot must have permission to send messages)</label>
+                    <div id="channelsContainer"></div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">👥Select Members to Tag (Multiple options can be selected)</label>
+                    <div id="membersContainer"></div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">✏️Title/Headline (Can include - or numbers, special characters, and emojis)</label>
+                    <input type="text" class="form-control" name="title" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">✏️Message (Can be sent as multiple lines, can include - or numbers, special characters, and emojis)</label>
+                    <textarea class="form-control" name="message" rows="4" required></textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">🖼️Image URL</label>
+                    <input type="text" class="form-control" name="image_url">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Tag everyone❓</label>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="tag_everyone" value="yes">
+                        <label class="form-check-label">✅Yes, tag @everyone</label>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Send as embed❓</label>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="send_as_embed" id="embedCheck" value="yes" onchange="toggleColorPicker()">
+                        <label class="form-check-label">✅Yes, send as announcement</label>
+                    </div>
+                </div>
+                <div class="mb-3" id="colorPicker" style="display: none;">
+                    <label class="form-label">🖌️Choose Color</label>
+                    <input type="color" class="form-control" name="color" value="#00ff00">
+                </div>
+                <button type="submit" class="btn btn-primary w-100">📨 Send Announcement 📨</button>
+            </form>
+            <div class="mb-3">
+                <button class="btn btn-info w-100 mt-3" onclick="updateStatus()">🔄Update Status</button>
+            </div>
+        </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
+
     ''')
 
 @app.route('/guilds')
