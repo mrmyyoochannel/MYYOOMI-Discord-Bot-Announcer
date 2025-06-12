@@ -39,7 +39,7 @@ class ProcessManager:
         self.start_process()
 
 if __name__ == "__main__":
-    manager = ProcessManager("app.py")  # เปลี่ยนจาก main.py เป็น app.py
+    manager = ProcessManager("app_ENG.py")  # เปลี่ยนจาก main.py เป็น app.py
 
     event_handler = RestartOnChange(manager)
     observer = Observer()
