@@ -1,4 +1,4 @@
-# Discord-Bot-Announcer ver.1.2a
+# Discord-Bot-Announcer ver.2
 
 Discord Bot Announcer in Python. This project uses Bootstrap.
 
