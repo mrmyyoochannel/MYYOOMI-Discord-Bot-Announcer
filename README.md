@@ -15,6 +15,7 @@ Discord Bot Announcer in Python. This project uses Bootstrap.
      pip install discord.py
      pip install python-dotenv
      pip install watchdog
+     pip install flask-cors
      ```
 
 2. **Configure Environment Variables:**
