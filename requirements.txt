@@ -1,3 +1,5 @@
 Flask
 discord.py
 python-dotenv
+watchdog
+flask-cors
