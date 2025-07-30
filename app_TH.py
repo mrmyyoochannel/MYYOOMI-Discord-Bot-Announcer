@@ -2,16 +2,34 @@ import asyncio
 import threading
 import os
 import time
-from flask import Flask, request, render_template_string, redirect, url_for, jsonify
+import uuid
+from flask import Flask, request, render_template_string, redirect, url_for, jsonify, session
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
 from flask_cors import CORS
+from datetime import datetime, timedelta
+from functools import wraps
 
+# โหลด .env
 load_dotenv()
 
 app = Flask(__name__)
 CORS(app)
+app.secret_key = os.getenv("FLASK_SECRET_KEY", "devkey")
+
+LOGIN_USER = os.getenv("LOGIN_USER", "admin")
+LOGIN_PASSWORD = os.getenv("LOGIN_PASSWORD", "password")
+
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get('logged_in'):
+            return redirect(url_for('login_page', next=request.url))
+        return f(*args, **kwargs)
+    return decorated_function
+
+# ---------- Discord Bot Setup ----------
 intents = discord.Intents.default()
 intents.guilds = True
 intents.members = True
@@ -19,7 +37,14 @@ intents.message_content = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 WELCOME_CHANNEL_ID = int(os.getenv("WELCOME_CHANNEL_ID", 0))
+WELCOME_MESSAGE = os.getenv("WELCOME_MESSAGE", "ยินดีต้อนรับ {mention} เข้าสู่ {guild}!")
 
+VOTE_SESSIONS = {}
+
+def generate_vote_id():
+    return str(uuid.uuid4())[:8]
+
+# ---------- Discord Events ----------
 @bot.event
 async def on_member_join(member):
     channel = bot.get_channel(WELCOME_CHANNEL_ID)
@@ -32,10 +57,10 @@ async def on_member_join(member):
             color=0x00ff00
         )
         embed.set_thumbnail(url=member.avatar.url if member.avatar else member.default_avatar.url)
-        embed.set_image(url="https://yourpicture.png")
+        embed.set_image(url="https://sv1.img.in.th/7inf7D.gif")
         embed.set_footer(text=f"สมาชิกใหม่: {member.name}")
         await channel.send(embed=embed)
-        
+
 @bot.event
 async def on_member_remove(member):
     channel = bot.get_channel(WELCOME_CHANNEL_ID)
@@ -50,25 +75,6 @@ async def on_member_remove(member):
         embed.set_footer(text=f"สมาชิกที่ออก: {member.name}")
         await channel.send(embed=embed)
 
-@app.route('/set_welcome_channel', methods=['POST'])
-def set_welcome_channel():
-    global WELCOME_CHANNEL_ID
-    data = request.json
-    new_channel_id = int(data.get("channel_id", 0))
-    WELCOME_CHANNEL_ID = new_channel_id
-    os.environ["WELCOME_CHANNEL_ID"] = str(new_channel_id)
-    return jsonify({"message": "Welcome channel updated!", "channel_id": new_channel_id})
-
-@app.route('/set_welcome_message', methods=['POST'])
-def set_welcome_message():
-    global WELCOME_MESSAGE
-    data = request.json
-    new_message = data.get("message", "")
-    WELCOME_MESSAGE = new_message
-    os.environ["WELCOME_MESSAGE"] = new_message  
-    return jsonify({"message": "Welcome message updated!", "content": new_message})
-
-
 @bot.event
 async def on_ready():
     print(f'Logged in as {bot.user}!')
@@ -78,38 +84,104 @@ async def on_ready():
 async def announce(ctx, *, message: str):
     await ctx.send(message)
 
-@app.route('/set_status', methods=['POST'])
-def set_status():
-    data = request.json
-    status_text = data.get("status", "กำลังรับข้อมูล...")
-    
-    async def update_status():
-        await bot.change_presence(activity=discord.Game(name=status_text))
-    
-    asyncio.run_coroutine_threadsafe(update_status(), bot.loop)
-    return jsonify({"message": "Status updated!"})
+@bot.event
+async def on_raw_reaction_add(payload):
+    for vote_id, vote in VOTE_SESSIONS.items():
+        if vote.get('message_id') == payload.message_id and datetime.utcnow() < vote['end_time']:
+            try:
+                idx = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'].index(str(payload.emoji))
+            except ValueError:
+                return
+            if not payload.member or payload.member.bot:
+                return
+            vote['votes'][payload.user_id] = idx
 
+@bot.event
+async def on_raw_reaction_remove(payload):
+    for vote_id, vote in VOTE_SESSIONS.items():
+        if vote.get('message_id') == payload.message_id and datetime.utcnow() < vote['end_time']:
+            try:
+                idx = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'].index(str(payload.emoji))
+            except ValueError:
+                return
+            if payload.user_id in vote['votes'] and vote['votes'][payload.user_id] == idx:
+                del vote['votes'][payload.user_id]
+
+# ---------- Login ----------
+@app.route('/login', methods=['GET', 'POST'])
+def login_page():
+    error = ""
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        if username == LOGIN_USER and password == LOGIN_PASSWORD:
+            session['logged_in'] = True
+            return redirect(url_for('home'))
+        else:
+            error = "ชื่อผู้ใช้หรือรหัสผ่านผิด"
+    return render_template_string('''
+    <!DOCTYPE html>
+    <html lang="th">
+    <head>
+        <meta charset="UTF-8">
+        <title>เข้าสู่ระบบ - MutodGrob</title>
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+    </head>
+    <body class="bg-dark text-white">
+        <div class="container mt-5">
+            <div class="card bg-dark text-white p-4 shadow col-md-6 offset-md-3">
+                <h1 class="text-center mb-4">🔐 เข้าสู่ระบบ</h1>
+                <form method="post">
+                    <div class="mb-3">
+                        <label>ชื่อผู้ใช้</label>
+                        <input type="text" class="form-control" name="username" required autofocus>
+                    </div>
+                    <div class="mb-3">
+                        <label>รหัสผ่าน</label>
+                        <input type="password" class="form-control" name="password" required>
+                    </div>
+                    {% if error %}
+                    <div class="alert alert-danger">{{ error }}</div>
+                    {% endif %}
+                    <button type="submit" class="btn btn-primary w-100">เข้าสู่ระบบ</button>
+                </form>
+            </div>
+        </div>
+    </body>
+    </html>
+    ''', error=error)
+
+@app.route('/logout')
+def logout():
+    session.pop('logged_in', None)
+    return redirect(url_for('login_page'))
+
+# ---------- Web Control Panel (protected) ----------
 @app.route('/')
+@login_required
 def home():
     return render_template_string('''
     <!DOCTYPE html>
     <html lang="th">
     <head>
         <meta charset="UTF-8">
-        <title>หน้าหลัก</title>
+        <title>MutodGrob - หน้าหลัก</title>
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
         <meta name="viewport" content="width=device-width, initial-scale=1">
     </head>
     <body class="bg-dark text-white">
         <div class="container mt-5 text-center">
          <div class="text-center">
-            <img src="https://yourpicture.png" class="img-fluid rounded-circle mx-auto d-block" alt="logo" style="max-width: 200px; height: auto;">
+            <img src="https://sv1.img.in.th/7iazJC.jpeg" class="img-fluid rounded-circle mx-auto d-block" alt="logo" style="max-width: 200px; height: auto;">
         </div>
             <h1 class="mb-4">🤖 MutodGrob Bot Control Panel</h1>
             <div class="d-grid gap-3 col-6 mx-auto">
                 <a href="/settings" class="btn btn-warning btn-lg">⚙️ ตั้งค่า </a>
                 <a href="/announcements" class="btn btn-success btn-lg">📢 ส่งประกาศ</a>
+                <a href="/vote" class="btn btn-primary btn-lg">🗳️ สร้าง/ดูโหวต</a>
                 <a href="/help" class="btn btn-info btn-lg">❓ วิธีใช้งาน</a>
+                <a href="/logout" class="btn btn-danger btn-lg">ออกจากระบบ</a>
             </div>
             <p class="mt-3 text-danger">❗ถ้ากดส่งข้อมูลไปแล้ว หรือ ระบบไม่ทำงาน รบกวนแจ้ง เพื่อทำการแก้ไข</p>
             <p class="mt-3 text-danger">❗ระบบอยู่ในช่วง พัฒนา อาจะมี บัคหรือ ปัญหาได้</p>
@@ -120,288 +192,118 @@ def home():
     ''')
 
 @app.route('/settings')
+@login_required
 def settings():
-    return render_template_string('''
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Bot Controls - MutodGrob</title>
-        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-        <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    </head>
-    <body class="text-white bg-dark">
-        <div class="container mt-5">
-            <div class="card bg-dark text-white p-4 shadow">
-                  <div class="text-center">
-                    <img src="https://yourpicture.png" class="img-fluid rounded-circle mx-auto d-block" alt="logo" style="max-width: 200px; height: auto;">
-                </div>
-                <h1 class="text-center mb-4">⚙️ ตั้งค่าบอท </h1>
-                <button class="btn btn-info w-100 mb-3" onclick="updateStatus()">🔄 อัปเดตสถานะบอท</button>
-                <button class="btn btn-info w-100 mb-3" onclick="updateWelcomeChannel()">🗨️ ตั้งค่าห้องต้อนรับ</button>
-                <button class="btn btn-info w-100 mb-3" onclick="updateWelcomeMessage()">📝 ตั้งค่าข้อความต้อนรับ</button>
-                <a href="/" class="btn btn-secondary w-100 mt-3">⬅️ กลับหน้าแรก</a>
-            </div>
-            <p class="mt-3 text-danger">❗ถ้ากดส่งข้อมูลไปแล้ว หรือ ระบบไม่ทำงาน รบกวนแจ้ง เพื่อทำการแก้ไข</p>
-            <p class="mt-3">สร้าง และ แก้ไขโดย: <a href="https://myyoomi.carrd.co/" class="text-info">™MYYOOMI</a></p>
-        </div>
+    return render_template_string(open("settings.html", encoding="utf-8").read())
 
-        <script>
-            async function updateWelcomeMessage() {
-                const { value: welcomeMsg } = await Swal.fire({
-                    title: 'ตั้งค่าข้อความต้อนรับ',
-                    input: 'textarea',
-                    inputLabel: 'คุณสามารถใช้ {mention} สำหรับแท็กผู้ใช้ และ {guild} สำหรับชื่อเซิร์ฟเวอร์',
-                    inputPlaceholder: 'ยินดีต้อนรับ {mention} เข้าสู่ {guild}!',
-                    showCancelButton: true,
-                    inputValidator: (value) => {
-                        if (!value) return 'กรุณาใส่ข้อความต้อนรับ';
-                    }
-                });
-
-                if (welcomeMsg) {
-                    await fetch('/set_welcome_message', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ message: welcomeMsg })
-                    });
-                    Swal.fire('สำเร็จ!', 'ข้อความต้อนรับได้รับการอัปเดตแล้ว', 'success');
-                }
-            }
-
-            async function updateStatus() {
-                const { value: newStatus } = await Swal.fire({
-                    title: 'อัปเดต สถานะ',
-                    input: 'text',
-                    inputLabel: 'ใส่สถานะให้บอทแสดง:',
-                    showCancelButton: true,
-                    inputValidator: (value) => {
-                        if (!value) {
-                            return 'คุณต้องเขียนอะไรซักอย่าง!'
-                        }
-                    }
-                });
-
-                if (newStatus) {
-                    await fetch('/set_status', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({status: newStatus})
-                    });
-                    Swal.fire('อัปเดตสำเร็จ!', 'บอทได้เปลี่ยนสถานะแล้ว', 'success');
-                }
-            }
-
-            async function updateWelcomeChannel() {
-                const { value: channelId } = await Swal.fire({
-                    title: 'Set Welcome Channel',
-                    input: 'text',
-                    inputLabel: 'ใส่ ID ห้องที่ต้องการให้บอทแจ้งเตือนคนเข้า:',
-                    showCancelButton: true,
-                    inputValidator: (value) => {
-                        if (!value) {
-                            return 'คุณต้องเขียนอะไรซักอย่าง!'
-                        }
-                    }
-                });
-
-                if (channelId) {
-                    await fetch('/set_welcome_channel', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({channel_id: channelId})
-                    });
-                    Swal.fire('ตั้งค่าสำเร็จ!', 'ห้องต้อนรับถูกตั้งค่าแล้ว', 'success');
-                }
-            }
-        </script>
-    </body>
-    
-    </html>
-    ''')
-    
 @app.route('/announcements')
+@login_required
 def announcement_page():
-    return render_template_string('''
-    <!DOCTYPE html>
-    <html lang="th">
-    <head>
-        <meta charset="UTF-8">
-        <title>📢 ระบบประกาศ - MutodGrob</title>
-        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-        <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-    </head>
-    <body class="bg-dark text-white">
-        <div class="container mt-5">
-            <div class="card bg-dark text-white p-4 shadow">
-                <div class="text-center">
-                    <img src="https://yourpicture.png" class="img-fluid rounded-circle mx-auto d-block" alt="logo" style="max-width: 200px; height: auto;">
-                </div>
-                <h1 class="text-center mb-4">📢 ระบบประกาศข้อความ 📢</h1>
-                <form action="/announce" method="post" onsubmit="handleSubmit(event)">
-                    <div class="mb-3">
-                        <label>🌐 เลือกเซิร์ฟเวอร์</label>
-                        <p class="mt-3 text-danger">❗ถ้าข้อมูลไม่โหลด หรือ ไม่เจอเซิฟเวอร์ ให้ รีโหลด หน้าเว็บไหม่</p>
-                        <select class="form-control" id="guildSelect" name="guild_id" onchange="fetchChannelsAndMembers()" required></select>
-                    </div>
-                    <div class="mb-3">
-                        <label>📁 เลือกช่อง</label>
-                        <div id="channelsContainer"></div>
-                    </div>
-                    <div class="mb-3">
-                        <label>👥 เลือกสมาชิก</label>
-                        <p class="mt-3 text-danger">❗เลือกได้หลายตัวเลือก</p>
-                        <div id="membersContainer"></div>
-                    </div>
-                    <div class="mb-3">
-                        <label>✏️ ชื่อเรื่อง</label>
-                        <p class="mt-3 text-danger">❗สามารถ ส่งอิโมจิ/ตัวอักศรพิเศษ ได้</p>
-                        <input type="text" class="form-control" name="title" required>
-                    </div>
-                    <div class="mb-3">
-                        <label>📄 ข้อความ</label>
-                        <p class="mt-3 text-danger">❗สามารถ ส่งแบบเว้นบรรนทัดได้ ส่งอิโมจิ/ตัวอักศรพิเศษ ได้</p>
-                        <textarea class="form-control" name="message" rows="4" required></textarea>
-                    </div>
-                    <div class="mb-3">
-                        <label>🖼️ URL รูปภาพ (ถ้ามี)</label>
-                        <input type="text" class="form-control" name="image_url">
-                    </div>
-                    <div class="form-check mb-2">
-                        <input class="form-check-input" type="checkbox" name="tag_everyone" value="yes">
-                        <label class="form-check-label">แท็ก @everyone</label>
-                    </div>
-                    <div class="form-check mb-3">
-                        <input class="form-check-input" type="checkbox" name="send_as_embed" id="embedCheck" value="yes" onchange="toggleColorPicker()">
-                        <label class="form-check-label">ส่งเป็น Embed</label>
-                    </div>
-                    <div class="mb-3" id="colorPicker" style="display: none;">
-                        <label>เลือกสี Embed</label>
-                        <input type="color" class="form-control" name="color" value="#00ff00">
-                    </div>
-                    <button type="submit" class="btn btn-success w-100">🚀 ส่งประกาศ</button>
-                </form>
-                <a href="/" class="btn btn-secondary w-100 mt-3">⬅️ กลับหน้าหลัก</a>
-            </div>
-            <p class="mt-3 text-danger">❗ถ้ากดส่งข้อมูลไปแล้ว หรือ ระบบไม่ทำงาน รบกวนแจ้ง เพื่อทำการแก้ไข</p>
-            <p class="mt-3">สร้าง และ แก้ไขโดย: <a href="https://myyoomi.carrd.co/" class="text-info">™MYYOOMI</a></p>
-        </div>
-
-        <script>
-        async function fetchGuilds() {
-            let response = await fetch('/guilds');
-            let guilds = await response.json();
-            let select = document.getElementById('guildSelect');
-            select.innerHTML = '<option value="">เลือกเซิร์ฟเวอร์</option>';
-            guilds.forEach(guild => {
-                let option = document.createElement('option');
-                option.value = guild.id;
-                option.textContent = guild.name;
-                select.appendChild(option);
-            });
-        }
-        async function fetchChannelsAndMembers() {
-            let guildId = document.getElementById('guildSelect').value;
-            if (!guildId) return;
-
-            let channels = await (await fetch(`/channels?guild_id=${guildId}`)).json();
-            let members = await (await fetch(`/members?guild_id=${guildId}`)).json();
-
-            let channelContainer = document.getElementById('channelsContainer');
-            let memberContainer = document.getElementById('membersContainer');
-
-            channelContainer.innerHTML = '';
-            channels.forEach(c => {
-                channelContainer.innerHTML += `<div class="form-check"><input class="form-check-input" type="checkbox" name="channels" value="${c.id}"> ${c.name}</div>`;
-            });
-
-            memberContainer.innerHTML = '';
-            members.forEach(m => {
-                memberContainer.innerHTML += `<div class="form-check"><input class="form-check-input" type="checkbox" name="members" value="${m.id}"> ${m.name}</div>`;
-            });
-        }
-        function toggleColorPicker() {
-            const embedCheck = document.getElementById('embedCheck');
-            const colorPicker = document.getElementById('colorPicker');
-            colorPicker.style.display = embedCheck.checked ? 'block' : 'none';
-        }
-        async function handleSubmit(event) {
-            event.preventDefault();
-            let form = event.target;
-            let formData = new FormData(form);
-            let response = await fetch(form.action, {
-                method: 'POST',
-                body: formData
-            });
-            if (response.ok) {
-                Swal.fire('สำเร็จ!', 'ประกาศถูกส่งแล้ว', 'success');
-            } else {
-                Swal.fire('ผิดพลาด!', 'ไม่สามารถส่งประกาศได้', 'error');
-            }
-        }
-        window.onload = function() {
-            fetchGuilds();
-            toggleColorPicker();
-        }
-        </script>
-    </body>
-    </html>
-    ''')
+    return render_template_string(open("announcements.html", encoding="utf-8").read())
 
 @app.route('/help')
+@login_required
 def help_page():
-    return render_template_string('''
+    return render_template_string(open("help.html", encoding="utf-8").read())
+
+@app.route('/vote', methods=['GET', 'POST'])
+@login_required
+def vote_page():
+    if request.method == 'POST':
+        vote_title = request.form.get('title')
+        options = [o.strip() for o in request.form.get('options', '').split('\n') if o.strip()]
+        channel_id = int(request.form.get('channel_id'))
+        guild_id = int(request.form.get('guild_id'))
+        duration_min = int(request.form.get('duration', 5))
+        end_time = datetime.utcnow() + timedelta(minutes=duration_min)
+        vote_id = generate_vote_id()
+        VOTE_SESSIONS[vote_id] = {
+            'title': vote_title,
+            'options': options,
+            'message_id': None,
+            'channel_id': channel_id,
+            'guild_id': guild_id,
+            'end_time': end_time,
+            'votes': {},
+        }
+        async def send_vote():
+            channel = bot.get_channel(channel_id)
+            emojis = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟']
+            description = ''
+            for idx, opt in enumerate(options):
+                description += f"{emojis[idx]} {opt}\n"
+            embed = discord.Embed(
+                title=f'🗳️ โหวต: {vote_title}',
+                description=description + f"\nโหวตสิ้นสุด <t:{int(end_time.timestamp())}:R>",
+                color=0x3498db
+            )
+            embed.set_footer(text=f'Vote ID: {vote_id}')
+            msg = await channel.send(embed=embed)
+            VOTE_SESSIONS[vote_id]['message_id'] = msg.id
+            for i in range(len(options)):
+                await msg.add_reaction(emojis[i])
+        asyncio.run_coroutine_threadsafe(send_vote(), bot.loop)
+        return redirect(url_for('vote_page'))
+    return render_template_string(open("vote.html", encoding="utf-8").read())
+
+@app.route('/vote/list')
+@login_required
+def vote_list_api():
+    now = datetime.utcnow()
+    votes = []
+    for vid, v in VOTE_SESSIONS.items():
+        if v['end_time'] > now:
+            votes.append({
+                'vote_id': vid,
+                'title': v['title'],
+                'remaining': str(v['end_time'] - now).split('.')[0]
+            })
+    return jsonify(votes)
+
+@app.route('/vote/result/<vote_id>')
+@login_required
+def vote_result_page(vote_id):
+    vote = VOTE_SESSIONS.get(vote_id)
+    if not vote:
+        return "Vote ID not found", 404
+    count = [0] * len(vote['options'])
+    for user_id, idx in vote['votes'].items():
+        if 0 <= idx < len(count):
+            count[idx] += 1
+    total = sum(count)
+    result_html = ""
+    emojis = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟']
+    for idx, opt in enumerate(vote['options']):
+        percent = (count[idx] / total * 100) if total else 0
+        result_html += f"<b>{emojis[idx]} {opt}</b>: {count[idx]} เสียง ({percent:.1f}%)<br>"
+    ended = datetime.utcnow() > vote['end_time']
+    return f'''
     <!DOCTYPE html>
     <html lang="th">
     <head>
         <meta charset="UTF-8">
-        <title>📘 วิธีใช้งาน - MutodGrob</title>
+        <title>📊 ผลโหวต - {vote["title"]}</title>
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
         <meta name="viewport" content="width=device-width, initial-scale=1">
     </head>
     <body class="bg-dark text-white">
         <div class="container mt-5">
-            <div class="text-center mb-4">
-                <img src="https://yourpicture.png" class="img-fluid rounded-circle" style="max-width: 150px;" alt="logo">
-                <h1 class="mt-3">❓ วิธีใช้งานระบบ MutodGrob</h1>
-            </div>
-            <div class="card bg-secondary p-4 text-start">
-                <h4>⚙️ หน้า ตั้งค่า</h4>
-                <ul>
-                    <li><strong>📝 ตั้งค่าข้อความต้อนรับ:</strong> ใส่ข้อความที่จะใช้ต้อนรับสมาชิกใหม่ เช่น <code>ยินดีต้อนรับ {mention} เข้าสู่ {guild}</code></li>
-                    <li><strong>🗨️ ตั้งค่าห้องต้อนรับ:</strong> กรอก ID ห้อง Discord ที่จะใช้ส่งข้อความต้อนรับ</li>
-                    <li><strong>🔄 อัปเดตสถานะ:</strong> เปลี่ยนข้อความสถานะของบอท</li>
-                </ul>
-
-                <h4 class="mt-4">📢 หน้า ประกาศ</h4>
-                <ul>
-                    <li>เลือกเซิร์ฟเวอร์ และห้องที่ต้องการส่ง</li>
-                    <li>เลือกสมาชิกที่ต้องการแท็ก (เลือกหลายคนได้)</li>
-                    <li>กรอกชื่อเรื่อง และข้อความประกาศ</li>
-                    <li>แนบรูปภาพได้ (ใส่ URL เท่านั้น)</li>
-                    <li>เลือกส่งแบบ Embed ได้ พร้อมกำหนดสี</li>
-                    <li>สามารถแท็ก @everyone ได้</li>
-                </ul>
-
-                <h4 class="mt-4">🛠️ หมายเหตุ</h4>
-                <ul>
-                    <li>ถ้าระบบไม่ทำงาน ให้รีเฟรชหรือติดต่อผู้ดูแล</li>
-                    <li>ระบบยังอยู่ในช่วงพัฒนา อาจมีบัคหรือปัญหา</li>
-                </ul>
-            </div>
-            <div class="text-center mt-4">
-                <a href="/" class="btn btn-light">⬅️ กลับหน้าหลัก</a>
-                <p class="mt-3">สร้าง และ แก้ไขโดย: <a href="https://myyoomi.carrd.co/" class="text-info">™MYYOOMI</a></p>
+            <div class="card bg-dark text-white p-4 shadow">
+                <h2 class="text-center">📊 ผลโหวต</h2>
+                <h3 class="text-center">{vote["title"]}</h3>
+                <div class="mt-3">
+                    {result_html}
+                </div>
+                <div class="mt-3 text-info">Vote ID: <b>{vote_id}</b></div>
+                <div class="mt-3 text-danger">{'⏰ หมดเวลาลงคะแนน' if ended else '⏰ ยังเปิดรับคะแนน'}</div>
+                <a href="/vote" class="btn btn-secondary w-100 mt-3">⬅️ กลับหน้าโหวต</a>
             </div>
         </div>
     </body>
     </html>
-    ''')
+    '''
 
-
-
+# ---------- API ไม่ต้องล็อกอิน (สำหรับ JS) ----------
 @app.route('/guilds')
 def get_guilds():
     guilds = [{'id': str(g.id), 'name': g.name} for g in bot.guilds]
@@ -426,6 +328,7 @@ def get_members():
     return jsonify(members)
 
 @app.route('/announce', methods=['POST'])
+@login_required
 def announce_web():
     guild_id = int(request.form.get('guild_id'))
     channel_ids = request.form.getlist('channels')
@@ -459,9 +362,38 @@ def announce_web():
                         await channel.send(content)
                         if image_url:
                             await channel.send(image_url)
-
     asyncio.run_coroutine_threadsafe(send_message(), bot.loop)
     return redirect(url_for('home'))
+
+@app.route('/set_welcome_channel', methods=['POST'])
+@login_required
+def set_welcome_channel():
+    global WELCOME_CHANNEL_ID
+    data = request.json
+    new_channel_id = int(data.get("channel_id", 0))
+    WELCOME_CHANNEL_ID = new_channel_id
+    os.environ["WELCOME_CHANNEL_ID"] = str(new_channel_id)
+    return jsonify({"message": "Welcome channel updated!", "channel_id": new_channel_id})
+
+@app.route('/set_welcome_message', methods=['POST'])
+@login_required
+def set_welcome_message():
+    global WELCOME_MESSAGE
+    data = request.json
+    new_message = data.get("message", "")
+    WELCOME_MESSAGE = new_message
+    os.environ["WELCOME_MESSAGE"] = new_message  
+    return jsonify({"message": "Welcome message updated!", "content": new_message})
+
+@app.route('/set_status', methods=['POST'])
+@login_required
+def set_status():
+    data = request.json
+    status_text = data.get("status", "กำลังรับข้อมูล...")
+    async def update_status():
+        await bot.change_presence(activity=discord.Game(name=status_text))
+    asyncio.run_coroutine_threadsafe(update_status(), bot.loop)
+    return jsonify({"message": "Status updated!"})
 
 if __name__ == "__main__":
     threading.Thread(target=app.run, kwargs={'host': '0.0.0.0', 'port': 5709, 'debug': False}, daemon=True).start()
