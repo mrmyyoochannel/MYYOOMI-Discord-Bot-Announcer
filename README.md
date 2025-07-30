@@ -1,6 +1,5 @@
 # Discord-Bot-Announcer
 #Ver.Thai: 2.0
-#Ver.ENG: 1.6
 
 Discord Bot Announcer in Python. This project uses Bootstrap.
 
