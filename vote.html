@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <title>🗳️ ระบบโหวต - MutodGrob</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+</head>
+<body class="bg-dark text-white">
+    <div class="container mt-5">
+        <div class="card bg-dark text-white p-4 shadow">
+            <div class="text-center">
+                <img src="https://sv1.img.in.th/7iazJC.jpeg" class="img-fluid rounded-circle mx-auto d-block" alt="logo" style="max-width: 200px; height: auto;">
+            </div>
+            <h1 class="text-center mb-4">🗳️ สร้างโหวตใหม่</h1>
+            <form action="/vote" method="post">
+                <div class="mb-3">
+                    <label>🌐 เลือกเซิร์ฟเวอร์</label>
+                    <select class="form-control" id="guildSelect" name="guild_id" onchange="fetchChannels()" required></select>
+                </div>
+                <div class="mb-3">
+                    <label>📁 เลือกห้อง</label>
+                    <select class="form-control" id="channelSelect" name="channel_id" required></select>
+                </div>
+                <div class="mb-3">
+                    <label>✏️ หัวข้อโหวต</label>
+                    <input type="text" class="form-control" name="title" required>
+                </div>
+                <div class="mb-3">
+                    <label>📝 ตัวเลือก (1 บรรทัดต่อ 1 ตัวเลือก, สูงสุด 10 ตัวเลือก)</label>
+                    <textarea class="form-control" name="options" rows="5" required></textarea>
+                </div>
+                <div class="mb-3">
+                    <label>⏰ เวลาโหวต (นาที)</label>
+                    <input type="number" class="form-control" name="duration" min="1" max="1440" value="5" required>
+                </div>
+                <button type="submit" class="btn btn-primary w-100">🚀 สร้างโหวต</button>
+            </form>
+        </div>
+        <div class="card bg-secondary p-4 mt-4">
+            <h2 class="text-center">📊 โหวตที่กำลังดำเนินอยู่</h2>
+            <div id="votesList"></div>
+        </div>
+        <a href="/" class="btn btn-secondary w-100 mt-3">⬅️ กลับหน้าหลัก</a>
+    </div>
+    <script>
+    async function fetchGuilds() {
+        let response = await fetch('/guilds');
+        let guilds = await response.json();
+        let select = document.getElementById('guildSelect');
+        select.innerHTML = '<option value="">เลือกเซิร์ฟเวอร์</option>';
+        guilds.forEach(guild => {
+            let option = document.createElement('option');
+            option.value = guild.id;
+            option.textContent = guild.name;
+            select.appendChild(option);
+        });
+    }
+    async function fetchChannels() {
+        let guildId = document.getElementById('guildSelect').value;
+        if (!guildId) return;
+        let response = await fetch(`/channels?guild_id=${guildId}`);
+        let channels = await response.json();
+        let select = document.getElementById('channelSelect');
+        select.innerHTML = '<option value="">เลือกห้อง</option>';
+        channels.forEach(channel => {
+            let option = document.createElement('option');
+            option.value = channel.id;
+            option.textContent = channel.name;
+            select.appendChild(option);
+        });
+    }
+    async function fetchVotesList() {
+        let resp = await fetch('/vote/list');
+        let data = await resp.json();
+        let div = document.getElementById('votesList');
+        if (!data.length) {
+            div.innerHTML = '<p>ยังไม่มีโหวตที่กำลังดำเนินอยู่</p>';
+            return;
+        }
+        let html = "";
+        data.forEach(vote => {
+            html += `<div class="border rounded p-3 mb-2">
+                <b>${vote.title}</b> <span class="badge bg-info text-dark">Vote ID: ${vote.vote_id}</span><br>
+                <span>เหลือเวลา: <span class="text-warning">${vote.remaining}</span></span><br>
+                <a href="/vote/result/${vote.vote_id}" class="btn btn-sm btn-success mt-2">ดูผลโหวต</a>
+            </div>`;
+        });
+        div.innerHTML = html;
+    }
+    window.onload = function() {
+        fetchGuilds();
+        fetchVotesList();
+    }
+    </script>
+</body>
+</html>
