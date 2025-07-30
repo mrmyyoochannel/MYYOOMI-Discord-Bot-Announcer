@@ -25,6 +25,10 @@ Discord Bot Announcer in Python. This project uses Bootstrap.
    - Add your Discord bot token:
      ``` 
      DISCORD_BOT_TOKEN=<your_token_here>
+     WELCOME_CHANNEL_ID=<your_WELCOME_CHANNEL_ID>
+     LOGIN_USER=<your_USER>
+     LOGIN_PASSWORD=<your_PASSWORD>
+     FLASK_SECRET_KEY=<your_SECRET_KEY>
      ```
 
 3. **Set Up Server:**
